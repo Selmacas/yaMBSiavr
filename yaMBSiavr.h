@@ -37,6 +37,9 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 THE POSSIBILITY OF SUCH DAMAGE.
     
 ************************************************************************/
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include <avr/io.h>
 /** 
  *  @code #include <yaMBSIavr.h> @endcode
@@ -51,23 +54,23 @@ THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* define baudrate of modbus */
-#ifndef BAUD
-#define BAUD 38400L
+#ifndef BAUD_SPD
+#define BAUD_SPD 19200L
 #endif
 
 /*
 * Definitions for transceiver enable pin.
 */
 #ifndef TRANSCEIVER_ENABLE_PORT
-#define TRANSCEIVER_ENABLE_PORT PORTD
+#define TRANSCEIVER_ENABLE_PORT PORTA.OUT
 #endif
 
 #ifndef TRANSCEIVER_ENABLE_PIN
-#define TRANSCEIVER_ENABLE_PIN 2
+#define TRANSCEIVER_ENABLE_PIN 4
 #endif
 
 #ifndef TRANSCEIVER_ENABLE_PORT_DDR
-#define TRANSCEIVER_ENABLE_PORT_DDR DDRD
+#define TRANSCEIVER_ENABLE_PORT_DDR PORTA.DIR
 #endif
 
 /**
@@ -193,6 +196,19 @@ THE POSSIBILITY OF SUCH DAMAGE.
 #define UBRRH UBRR0H
 #define UBRRL UBRR0L
 
+#elif defined(__AVR_ATtiny3226__)
+#define attiny3226_init
+#define UART_TRANSMIT_COMPLETE_INTERRUPT	USART0_TXC_vect
+#define UART_RECEIVE_INTERRUPT				USART0_RXC_vect
+#define UART_TRANSMIT_INTERRUPT				USART0_DRE_vect
+#define	UART_N USART0
+#define UART_PORTMUX						PORTMUX.USARTROUTEA
+#define UART_PORTMUX_AND_MASK				(~(PORTMUX_USART0_gm))
+#define UART_PORTMUX_OR_MASK				(PORTMUX_USART0_ALT1_gc)
+#define TXPORT								PORTA
+#define TXPIN								1 
+#define RXPORT								PORTA
+#define RXPIN								2
 #else
 #error "no definition available"
 #endif
@@ -200,7 +216,11 @@ THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef F_CPU
 #error " F_CPU not defined "
 #else
-   #define _UBRR (F_CPU / 8 / BAUD ) -1
+#if defined(attiny3226_init)
+   #define BAUD_PRESC ((uint16_t)((8*F_CPU)/(BAUD_SPD))) /*Double speed*/
+#else
+   #define _UBRR (F_CPU / 8 / BAUD_SPD ) -1
+#endif
 #endif /* F_CPU */
 /*
  * Available address modes.
@@ -218,16 +238,17 @@ THE POSSIBILITY OF SUCH DAMAGE.
 * Use 485 or 232, default: 485
 * Use 232 for testing purposes or very simple applications that do not require RS485 and bus topology.
 */
-#define PHYSICAL_TYPE 485 //possible values: 485, 232
+#define attiny3226_485 485
+#define PHYSICAL_TYPE attiny3226_485 //possible values: 485, 232 
 
 
-#if BAUD>=19200
+#if BAUD_SPD>=19200
 #define modbusInterFrameDelayReceiveStart 16
 #define modbusInterFrameDelayReceiveEnd 18
 #define modbusInterCharTimeout 7
 #else
 #define modbusBlocksize 10
-#define modbusBlockTime ((float)modbusBlocksize*1000000)/((float) BAUD) //is 260 for 38400
+#define modbusBlockTime ((float)modbusBlocksize*1000000)/((float) BAUD_SPD) //is 260 for 38400
 #define timerISROccurenceTime 100 //time in microseconds between two calls of modbusTickTimer
 #define modbusInterFrameDelayReceiveStart  (uint16_t)(modbusBlockTime*3.5/(float)timerISROccurenceTime)
 #define modbusInterFrameDelayReceiveEnd (uint16_t)(modbusBlockTime*4/(float)timerISROccurenceTime)
@@ -398,4 +419,8 @@ extern uint8_t modbusIsRangeInRange(uint16_t startAdr, uint16_t lastAdr);
 
 extern volatile uint16_t modbusDataAmount;
 extern volatile uint16_t modbusDataLocation;
+
+#ifdef __cplusplus
+}
+#endif
 #endif

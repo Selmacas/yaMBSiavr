@@ -202,33 +202,49 @@ void modbusTickTimer(void)
 ISR(UART_RECEIVE_INTERRUPT)
 {
 	unsigned char data;
+#if defined(attiny3226_init)
+	data = UART_N.RXDATAL;
+#else
 	data = UART_DATA;
+#endif
 	modbusTimer=0; //reset timer
 	if (!(BusState & (1<<ReceiveCompleted)) && !(BusState & (1<<TransmitRequested)) && !(BusState & (1<<Transmitting)) && (BusState & (1<<Receiving)) && !(BusState & (1<<BusTimedOut)))
 	{
-		if (DataPos>MaxFrameIndex) modbusReset();
-	    	else
+		if (DataPos>MaxFrameIndex) 
+		{
+			modbusReset();
+		}
+	    else
 		{
 			rxbuffer[DataPos]=data;
 			DataPos++; //TODO: maybe prevent this from exceeding 255?
 		}	    
-    	} else 
-	if (!(BusState & (1<<ReceiveCompleted)) && !(BusState & (1<<TransmitRequested)) && !(BusState & (1<<Transmitting)) && !(BusState & (1<<Receiving)) && (BusState & (1<<BusTimedOut))) 
+    } 
+	else if (!(BusState & (1<<ReceiveCompleted)) && !(BusState & (1<<TransmitRequested)) && !(BusState & (1<<Transmitting)) && !(BusState & (1<<Receiving)) && (BusState & (1<<BusTimedOut))) 
 	{ 
 		 rxbuffer[0]=data;
 		 BusState=((1<<Receiving)|(1<<TimerActive));
 		 DataPos=1;
-    	}
+    }
 }
 
 ISR(UART_TRANSMIT_INTERRUPT)
 {
 	BusState&=~(1<<TransmitRequested);
 	BusState|=(1<<Transmitting);
+#if defined(attiny3226_init)
+	UART_N.TXDATAL=rxbuffer[DataPos];
+#else
 	UART_DATA=rxbuffer[DataPos];
+#endif
 	DataPos++;
-	if (DataPos==(PacketTopIndex+1)) {
+	if (DataPos==(PacketTopIndex+1)) 
+	{
+#if defined(attiny3226_init)
+		UART_N.CTRLA &= ~(USART_DREIE_bm);
+#else
 		UART_CONTROL&=~(1<<UART_UDRIE);
+#endif
 	}
 }
 
@@ -238,10 +254,23 @@ ISR(UART_TRANSMIT_COMPLETE_INTERRUPT)
 	transceiver_rxen();
 	#endif
 	modbusReset();
+#if defined(attiny3226_init)
+	UART_N.STATUS |= USART_TXCIF_bm;
+#endif
 }
 
 void modbusInit(void)
 {
+#if defined(attiny3226_init) 
+	TXPORT.DIR |=  (1 << TXPIN);
+	RXPORT.DIR &= ~(1 << RXPIN);
+	UART_PORTMUX &= UART_PORTMUX_AND_MASK;
+	UART_PORTMUX |= UART_PORTMUX_OR_MASK;
+	UART_N.BAUD = BAUD_PRESC;
+	UART_N.CTRLA = USART_TXCIE_bm | USART_RXCIE_bm;
+	UART_N.CTRLC = USART_CHSIZE_0_bm | USART_CHSIZE_1_bm;
+	UART_N.CTRLB = USART_RXEN_bm | USART_TXEN_bm | USART_RXMODE_0_bm;
+#else
 	UBRRH = (unsigned char)((_UBRR) >> 8);
 	UBRRL = (unsigned char) _UBRR;
 	UART_STATUS = (1<<U2X); //double speed mode.
@@ -251,6 +280,7 @@ void modbusInit(void)
    UCSRC = (3<<UCSZ0); //Frame Size
 #endif
 	UART_CONTROL = (1<<TXCIE)|(1<<RXCIE)|(1<<RXEN)|(1<<TXEN); // USART receiver and transmitter and receive complete interrupt
+#endif
 	#if PHYSICAL_TYPE == 485
 	TRANSCEIVER_ENABLE_PORT_DDR|=(1<<TRANSCEIVER_ENABLE_PIN);
 	transceiver_rxen();
@@ -272,7 +302,11 @@ void modbusSendMessage(unsigned char packtop)
 	#if PHYSICAL_TYPE == 485
 	transceiver_txen();
 	#endif
+#if defined(attiny3226_init)
+	UART_N.CTRLA |= USART_DREIE_bm;
+#else
 	UART_CONTROL|=(1<<UART_UDRIE);
+#endif
 	BusState&=~(1<<ReceiveCompleted);
 }
 
